@@ -1,0 +1,37 @@
+# Scan this file for changes every 30 seconds
+#refresh_rate: 30 seconds
+
+appenders:
+    # An appender named "stdout" that writes to stdout
+    stdout:
+        kind: console
+        encoder:
+            pattern: "{d(%H:%M:%S:%.3f)} {l} {t} - {m}{n}"
+
+    # An appender named "chain_scraper" that writes to a file with a custom pattern encoder
+    chain_scraper:
+        kind: file
+        path: "log/chain_scraper.log"
+        encoder:
+            pattern: "{d} - {m}{n}"
+
+# Set the default logging level to "warn" and attach the "stdout" appender to the root
+root:
+    level: info
+    appenders:
+        - stdout
+        - chain_scraper
+
+loggers:
+    # Raise the maximum log level for events sent to the "app::backend::db" logger to "info"
+#    app::backend::db:
+#        level: info
+
+    # Route log events sent to the "chain_scraper" logger/module to the "chain_scraper" appender,
+    # and *not* the normal appenders installed at the root
+    chain_scraper:
+        level: debug
+        appenders:
+            - stdout
+            - chain_scraper
+        additive: false

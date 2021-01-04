@@ -1,0 +1,50 @@
+[package]
+name = "chain_scraper"
+version = "0.1.0"
+authors = ["Alexey <yatsew.alexey@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+#logs
+log = { version = "0.4.11", features = ["release_max_level_info", "max_level_trace"] }
+env_logger = "0.8.1"
+log4rs = "1.0.0"
+#web
+actix-web = "3.3.2"
+#db
+diesel = { version = "1.4.4", features = ["postgres"] }
+elasticsearch = "7.10.0-alpha.1"
+mongodb = "1.1.1"
+typed-builder = "0.8.0"
+
+# error mod / crasher
+backtrace = "0.3.50"
+toml = "0.5.6"
+
+
+#error
+anyhow = "1.0.34"
+thiserror = "1.0"
+#crypto
+tiny-keccak = { version = "2.0.2", features = ["sha3", "keccak"] }
+hex = "0.4.2"
+#others
+dotenv = "0.15.0"
+lazy_static = "1.4.0"
+web3 = "0.13.0"
+tokio = { version = "0.2.23", features = ["full"] }
+futures = "0.3.8"
+num_cpus = "1.13.0"
+rayon = "1.5.0"
+futures-core = "0.3.8"
+structopt = "0.3"
+serde_json = "1.0.60"
+serde = "1.0.118"
+
+[dev-dependencies]
+
+[features]
+default = ["debug_count"]
+debug_count = []
