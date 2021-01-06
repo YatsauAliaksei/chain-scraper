@@ -30,7 +30,7 @@ loggers:
     # Route log events sent to the "chain_scraper" logger/module to the "chain_scraper" appender,
     # and *not* the normal appenders installed at the root
     chain_scraper:
-        level: debug
+        level: info
         appenders:
             - stdout
             - chain_scraper

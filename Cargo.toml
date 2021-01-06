@@ -16,6 +16,8 @@ actix-web = "3.3.2"
 #db
 diesel = { version = "1.4.4", features = ["postgres"] }
 elasticsearch = "7.10.0-alpha.1"
+#elastic = "~0.21.0-pre.5"
+#elastic_derive = "~0.21.0-pre.5"
 mongodb = "1.1.1"
 typed-builder = "0.8.0"
 
@@ -30,7 +32,9 @@ thiserror = "1.0"
 #crypto
 tiny-keccak = { version = "2.0.2", features = ["sha3", "keccak"] }
 hex = "0.4.2"
+rustc-hex = "2.1.0"
 #others
+chrono = { version = "0.4.19", features = ["serde"] }
 dotenv = "0.15.0"
 lazy_static = "1.4.0"
 web3 = "0.13.0"

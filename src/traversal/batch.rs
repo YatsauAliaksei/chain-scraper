@@ -11,6 +11,7 @@ use web3::types::{Block, Transaction, U64};
 use web3::Web3;
 
 use crate::traversal::http::{BlockExtended, ChainData, Transport};
+use std::time::Instant;
 
 async fn join_parallel<T: Send + 'static>(futures: impl IntoIterator<Item=impl Future<Output=Vec<T>> + Send + 'static>) -> Vec<T> {
     let tasks: Vec<_> = futures.into_iter().map(tokio::spawn).collect();
@@ -68,11 +69,17 @@ pub async fn traversal(url: &str, mut range: Range<u64>, batch_size: u64) -> Opt
 async fn traversal_parallel(web3: Arc<Web3<Transport>>, range: Range<u64>, batch_size: u64) -> ChainData {
     let ranges = create_ranges(&range, batch_size);
 
+    info!("{} ranges started with size: {}", ranges.len(), batch_size);
+    let start_time = Instant::now();
+    let ranges_len = ranges.len();
+
     let jobs: Vec<_> = ranges.into_iter().map(move |range| {
         process_range(range, web3.clone())
     }).collect();
 
     let blocks = join_parallel(jobs.into_iter()).await;
+
+    info!("{} ranges processed in {}ms. Blocks found : {}", ranges_len, (Instant::now() - start_time).as_millis(), blocks.len());
 
     ChainData::new(range, blocks)
 }

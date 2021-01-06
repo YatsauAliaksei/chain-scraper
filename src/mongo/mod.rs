@@ -36,7 +36,6 @@ impl MongoDB {
     pub async fn find_trx_to(&self, address: &str) -> Result<Vec<Transaction>> {
         let collection = self.database.collection(model::Transaction::COLLECTION_NAME);
 
-
         let mut cursor = match collection.find(doc! {
             "to": address
         }, FindOptions::builder()
@@ -49,9 +48,11 @@ impl MongoDB {
 
         let mut result = vec![];
         while let Some(doc) = cursor.next().await {
-            info!("{:?}", doc);
+            debug!("{:?}", doc);
             result.push(bson::from_document::<Transaction>(doc?)?);
         }
+
+        info!("Found {} trx related to address: {}", result.len(), address);
 
         Ok(result)
     }
@@ -182,13 +183,14 @@ pub fn take_db(url: &str) -> Database {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::LowerHex;
+
     use log::info;
     use mongodb::{bson, bson::doc, bson::Document};
     use mongodb::options::{CreateCollectionOptions, DatabaseOptions, FindOneOptions, IndexOptionDefaults};
 
     use crate::mongo::model::Contract;
     use crate::parse::contract_abi::create_contract_abi;
-    use std::fmt::LowerHex;
 
     use super::*;
 

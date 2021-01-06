@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, Keccak};
 
 use crate::parse::contract_abi::{ContractAbi, ContractFunction, FunctionType, HasName, InOutType};
-use crate::parse::input_data::{InputData, Type};
+use crate::parse::input_data::{InputData};
+use serde_json::{Value, Map};
 
 use super::contract_abi::ValueType;
 
@@ -28,7 +29,8 @@ fn parse_bool(trx_raw_input: &str, offset: usize) -> bool {
     num == 1
 }
 
-fn dynamic_type(trx_raw_input: &str, offset: usize) -> String {
+// 'bytes' will work only if can be represented as utf8 so no diff with 'string' type
+fn dynamic_type(trx_raw_input: &str, offset: usize) -> Map<String, Value> {
     let location = &trx_raw_input[offset..BYTE_LENGTH + offset];
     let location = usize::from_str_radix(location, 16).expect("Location as u64 expected") << 1;
 
@@ -37,7 +39,9 @@ fn dynamic_type(trx_raw_input: &str, offset: usize) -> String {
 
     let data_hex = &trx_raw_input[8 + location + BYTE_LENGTH..8 + location + BYTE_LENGTH + len];
     let data = hex::decode(data_hex).expect("Hex in str");
-    String::from_utf8(data).expect("String expected")
+    let data = String::from_utf8(data).expect("String expected");
+
+    serde_json::from_str(&data).expect("Orig value failed")
 }
 
 fn get_method_id(signature: &str) -> String {
@@ -50,7 +54,7 @@ fn get_method_id(signature: &str) -> String {
     hex::encode(hash)
 }
 
-pub fn parse_trx(id_method: &HashMap<String, &ContractFunction>, contract: &ContractAbi, trx_raw_input: &str) -> InputData {
+pub fn parse_trx(id_method: &HashMap<String, &ContractFunction>, trx_raw_input: &str) -> InputData {
     let trx_raw_input = trx_raw_input.strip_prefix("0x").unwrap_or(trx_raw_input);
     debug!("input: {:?}", trx_raw_input);
 
@@ -61,16 +65,16 @@ pub fn parse_trx(id_method: &HashMap<String, &ContractFunction>, contract: &Cont
     let function = id_method.get(&method_id.to_string()).expect(&format!("method expected: {}", method_id));
 
     debug!("Method: {:?}", function);
-    let mut args = HashMap::with_capacity(function.inputs.len());
+    let mut args = Map::with_capacity(function.inputs.len());
 
     for input in &function.inputs {
         let value = match &input.r#type {
-            ValueType::ADDRESS => Type::STRING(parse_address(trx_raw_input, offset)),
-            ValueType::BOOL => Type::BOOL(parse_bool(trx_raw_input, offset)),
-            ValueType::STRING => Type::STRING(dynamic_type(trx_raw_input, offset)),
-            ValueType::BYTES => Type::STRING(dynamic_type(trx_raw_input, offset)),
+            ValueType::ADDRESS => Value::from(parse_address(trx_raw_input, offset)),
+            ValueType::BOOL => Value::from(parse_bool(trx_raw_input, offset)),
+            ValueType::STRING => Value::from(dynamic_type(trx_raw_input, offset)),
+            ValueType::BYTES => Value::from(dynamic_type(trx_raw_input, offset)),
             int if int.to_string().starts_with("UINT") || int.to_string().starts_with("INT") =>
-                Type::INT(parse_int(trx_raw_input, offset)),
+                Value::from(parse_int(trx_raw_input, offset)),
             _ => panic!("Unknown type: {:?}", input),
         };
         offset += BYTE_LENGTH;
@@ -186,8 +190,9 @@ mod tests {
 
         info!("map: {:?}", id_method);
 
-        let input_data = super::parse_trx(&id_method, &con, SUBMIT_TRX_HEX);
-        println!("Result: {:?}", input_data);
+        let input_data = super::parse_trx(&id_method, SUBMIT_TRX_HEX);
+        info!("Result: {:?}", input_data);
+
         assert_eq!("submit", input_data.method_name());
         assert_eq!(format!("{:?}", input_data.args().get("clientData").unwrap()), r#"{"tax":132,"number":"UUID-1234"}"#);
         assert_eq!(format!("{:?}", input_data.args().get("userData").unwrap()), r#"{"id":132,"name":"Alex"}"#);

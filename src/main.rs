@@ -45,12 +45,9 @@ async fn main() -> Result<()> {
 
     let elastic = Elastic::new(&args.es_url);
 
-    let contract_processor =  ContractProcessor::new(&mongodb, &elastic);
+    let contract_processor =  ContractProcessor::new(mongodb, elastic);
 
     web::server::run_server(contract_processor, 8084).await?;
-
-    // let database_url = env::var("DATABASE_URL")
-    //     .expect("DATABASE_URL must be set");
 
     Ok(())
 }
@@ -58,19 +55,19 @@ async fn main() -> Result<()> {
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Chain Scrapper")]
 struct Args {
-    #[structopt(short = "cu", long = "chain_url", default_value = "ws://localhost:8546")]
+    #[structopt(long = "chain_url", default_value = "ws://localhost:8546")]
     chain_url: String,
 
-    #[structopt(short = "mu", long = "mongo_url", default_value = "localhost")]
+    #[structopt(long = "mongo_url", default_value = "localhost")]
     mongo_url: String,
 
-    #[structopt(short = "eu", long = "elastic_url", default_value = "http://localhost:9200")]
+    #[structopt(long = "elastic_url", default_value = "http://localhost:9200")]
     es_url: String,
 
-    #[structopt(short, long, default_value = "170000")]
+    #[structopt(short, long, default_value = "0")]
     start_block: u64,
 
-    #[structopt(short, long, default_value = "173000")]
+    #[structopt(short, long, default_value = "100000")]
     end_block: u64,
 
     #[structopt(short, long, default_value = "100")]

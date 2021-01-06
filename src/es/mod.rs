@@ -2,25 +2,28 @@ use anyhow::{bail, Error, Result};
 use elasticsearch::{BulkParts, Elasticsearch, IndexParts};
 use elasticsearch::http::request::JsonBody;
 use elasticsearch::http::transport::Transport;
-use log::{debug, info};
-use serde_json::Value;
+use log::{debug, info, warn};
+use rustc_hex::ToHex;
+use serde_json::{json, Value};
 use web3::types::Transaction;
 
 use crate::mongo::model::Contract;
 use crate::mongo::MongoDB;
 use crate::parse::contract_abi::ContractAbi;
 use crate::parse::trx;
+use std::time::{Instant, SystemTime};
+use chrono::{DateTime, Utc};
 
 mod transaction;
 
 
-pub struct ContractProcessor<'a> {
-    mongo: &'a MongoDB,
-    elastic: &'a Elastic,
+pub struct ContractProcessor {
+    mongo: MongoDB,
+    elastic: Elastic,
 }
 
-impl<'a> ContractProcessor<'a> {
-    pub fn new(mongo: &'a MongoDB, elastic: &'a Elastic) -> Self {
+impl ContractProcessor {
+    pub fn new(mongo: MongoDB, elastic: Elastic) -> Self {
         ContractProcessor {
             mongo,
             elastic,
@@ -37,7 +40,7 @@ impl<'a> ContractProcessor<'a> {
 
         let mut data = vec![];
         for trx in transactions {
-            let input = trx::parse_trx(&map, &contract.abi_json, trx.input.to_hex::<String>().as_ref());
+            let input = trx::parse_trx(&map, trx.input.0.to_hex::<String>().as_ref());
             let trx = transaction::Transaction::new(trx, input);
             data.push(trx);
         }
@@ -64,12 +67,19 @@ impl Elastic {
     }
 
     pub async fn save_trx(&self, transactions: Vec<transaction::Transaction>) -> Result<bool> {
-        let mut body: Vec<JsonBody<_>> = Vec::with_capacity(transaction.len());
+        let mut body: Vec<JsonBody<_>> = Vec::with_capacity(transactions.len());
 
         info!("Saving to ES {} trx", transactions.len());
 
         for trx in transactions {
-            body.push(JsonBody::from(trx));
+            let res = serde_json::to_value(&trx)?;
+            debug!("Putting to map: {}", res);
+            body.push(json!({
+            "index": {
+                "_id": trx.hash
+            }
+            }).into());
+            body.push(res.into());
         }
 
         let response = self.es.bulk(BulkParts::Index("transactions"))
@@ -80,17 +90,11 @@ impl Elastic {
         let response_body = response.json::<Value>().await?;
         let successful = response_body["errors"].as_bool().unwrap() == false;
 
+        if !successful {
+            warn!("Errors while saving to ES: {:?}", response_body)
+        }
+
         Ok(successful)
-    }
-
-    pub fn create_index(&self) -> Result<()> {
-        // todo: create index
-        Ok(())
-    }
-
-    pub fn save(&self, index: &str) -> Result<()> {
-        // todo: save to index
-        Ok(())
     }
 }
 
