@@ -1,10 +1,8 @@
 use std::fmt::Display;
 
-use anyhow::{bail, Error, Result};
-use mongodb::{bson, bson::Document};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde::export::Formatter;
-use serde_json::Value;
 
 /// Creates `ContractAbi` from given Json
 pub fn create_contract_abi(contract_json: &str) -> Result<ContractAbi> {

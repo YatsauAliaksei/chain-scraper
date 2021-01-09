@@ -1,22 +1,23 @@
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use futures::Future;
-use futures::ready;
-use futures::task::{Context, Poll};
 use log::{debug, info, trace, warn};
-use tokio::macros::support::Pin;
-use web3::types::{Block, Transaction, U64};
+use web3::futures::TryFutureExt;
+use web3::types::U64;
 use web3::Web3;
 
-use crate::traversal::http::{BlockExtended, ChainData, Transport};
-use std::time::Instant;
+use crate::traversal::{BlockExtended, ChainData};
+use crate::traversal::connection::Transport;
+
+lazy_static! {
+    pub static ref TRAVERSE_IN_PROGRESS: Mutex<bool> = Mutex::new(false);
+}
 
 async fn join_parallel<T: Send + 'static>(futures: impl IntoIterator<Item=impl Future<Output=Vec<T>> + Send + 'static>) -> Vec<T> {
     let tasks: Vec<_> = futures.into_iter().map(tokio::spawn).collect();
-    // unwrap the Result because it is introduced by tokio::spawn()
-    // and isn't something our caller can handle
 
     futures::future::join_all(tasks)
         .await
@@ -26,7 +27,7 @@ async fn join_parallel<T: Send + 'static>(futures: impl IntoIterator<Item=impl F
         .collect()
 }
 
-pub fn create_ranges(range: &Range<u64>, batch_size: u64) -> Vec<Range<u64>> {
+fn create_ranges(range: &Range<u64>, batch_size: u64) -> Vec<Range<u64>> {
     let mut start_pos = range.start;
     let mut batches = vec![];
 
@@ -43,14 +44,15 @@ pub fn create_ranges(range: &Range<u64>, batch_size: u64) -> Vec<Range<u64>> {
     batches
 }
 
-pub async fn traversal(url: &str, mut range: Range<u64>, batch_size: u64) -> Option<ChainData> {
-    let web3 = Arc::new(crate::traversal::http::create_web3(url).await);
+pub async fn traversal(web3: Arc<Web3<Transport>>, mut range: Range<u64>, batch_size: u64) -> Option<ChainData> {
+    if *TRAVERSE_IN_PROGRESS.lock().unwrap() {
+        debug!("Travers in progress");
+        return None;
+    } else {
+        *TRAVERSE_IN_PROGRESS.lock().unwrap() = true;
+    }
 
-    let web3_cloned = web3.clone();
-
-    let last_block = tokio::task::spawn_blocking(move || {
-        futures::executor::block_on(web3_cloned.eth().block_number()).expect("result")
-    }).await.expect("not null").as_u64();
+    let last_block = web3.eth().block_number().into_future().await.expect("last block result").as_u64();
 
     if range.start > last_block {
         return None;
@@ -61,27 +63,38 @@ pub async fn traversal(url: &str, mut range: Range<u64>, batch_size: u64) -> Opt
         info!("Range changed to align last block in chain. {:?}", range);
     }
 
-    // let web3 = web3.clone();
-
     Some(traversal_parallel(web3, range, batch_size).await)
 }
 
-async fn traversal_parallel(web3: Arc<Web3<Transport>>, range: Range<u64>, batch_size: u64) -> ChainData {
-    let ranges = create_ranges(&range, batch_size);
+async fn traversal_parallel(web3: Arc<Web3<Transport>>, init_range: Range<u64>, batch_size: u64) -> ChainData {
+    let ranges = create_ranges(&init_range, 100_000);
 
-    info!("{} ranges started with size: {}", ranges.len(), batch_size);
-    let start_time = Instant::now();
-    let ranges_len = ranges.len();
+    info!("Range: {:?}. {} ranges started with size: {}. Sub range size: {}", init_range, ranges.len(), 100_000, batch_size);
 
-    let jobs: Vec<_> = ranges.into_iter().map(move |range| {
-        process_range(range, web3.clone())
-    }).collect();
+    let total_time = Instant::now();
+    let mut result = vec![];
 
-    let blocks = join_parallel(jobs.into_iter()).await;
+    for range in ranges {
+        let web3 = web3.clone();
+        let range_start_time = Instant::now();
 
-    info!("{} ranges processed in {}ms. Blocks found : {}", ranges_len, (Instant::now() - start_time).as_millis(), blocks.len());
+        let sub_ranges = create_ranges(&range, 100);
+        let sub_ranges_len = sub_ranges.len();
 
-    ChainData::new(range, blocks)
+        let jobs: Vec<_> = sub_ranges.into_iter()
+            .map(move |range| {
+                process_range(range, web3.clone())
+            }).collect();
+
+        let blocks = join_parallel(jobs.into_iter()).await;
+
+        info!("Range {:?} finished. {} sub-ranges processed in {}ms. Blocks found : {}", range, sub_ranges_len, (Instant::now() - range_start_time).as_millis(), blocks.len());
+        result.extend(blocks);
+    }
+
+    info!("Total spent time: {:?}", Instant::now() - total_time);
+
+    ChainData::new(init_range, result)
 }
 
 async fn process_range(range: Range<u64>, web3: Arc<Web3<Transport>>) -> Vec<BlockExtended> {
@@ -124,7 +137,7 @@ mod tests {
     use mongodb::results::InsertManyResult;
 
     use crate::mongo::MongoDB;
-    use crate::traversal::http::ChainData;
+    use crate::traversal::ChainData;
 
     use super::*;
 
@@ -146,22 +159,13 @@ mod tests {
         let batch_size = 100;
 
         let start_time = std::time::Instant::now();
+        let mongo_db = Arc::new(MongoDB::new("localhost"));
 
         // todo: think on streaming instead of bulk op
-        let chain_data = super::traversal("ws://localhost:8546", range, batch_size).await;
+        let web3 = Arc::new(crate::traversal::connection::create_web3(url).await);
+        let cd = super::traversal(web3, range, batch_size).await?;
 
         println!("Total time: {:?}", (std::time::Instant::now() - start_time).as_secs());
-
-        assert!(chain_data.is_some());
-        let chain_data = chain_data.unwrap();
-
-        println!("{}", chain_data);
-
-        println!("{:?}", chain_data.get_blocks());
-
-        let mongo_db = MongoDB::new("localhost");
-
-        mongo_db.save_chain_data(&chain_data).await?;
 
         Ok(())
     }

@@ -700,7 +700,7 @@ dependencies = [
  "anyhow",
  "backtrace",
  "chrono",
- "diesel",
+ "clokwerk",
  "dotenv",
  "elasticsearch",
  "env_logger",
@@ -752,6 +752,15 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
+]
+
+[[package]]
+name = "clokwerk"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9797a6d3acefa28d4cc62bf548b6ddc57b8ae51a43702d001cb46fba1dc48c1"
+dependencies = [
+ "chrono",
 ]
 
 [[package]]
@@ -939,29 +948,6 @@ name = "derive_more"
 version = "0.99.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41cb0e6161ad61ed084a36ba71fbba9e3ac5aee3606fb607fe08da6acbcf3d8c"
-dependencies = [
- "proc-macro2 1.0.24",
- "quote 1.0.7",
- "syn 1.0.53",
-]
-
-[[package]]
-name = "diesel"
-version = "1.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e2de9deab977a153492a1468d1b1c0662c1cf39e5ea87d0c060ecd59ef18d8c"
-dependencies = [
- "bitflags",
- "byteorder",
- "diesel_derives",
- "pq-sys",
-]
-
-[[package]]
-name = "diesel_derives"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45f5098f628d02a7a0f68ddba586fb61e80edec3bdc1be3b921f4ceec60858d3"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
@@ -2284,15 +2270,6 @@ name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
-
-[[package]]
-name = "pq-sys"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ac25eee5a0582f45a67e837e350d784e7003bd29a5f460796772061ca49ffda"
-dependencies = [
- "vcpkg",
-]
 
 [[package]]
 name = "primitive-types"

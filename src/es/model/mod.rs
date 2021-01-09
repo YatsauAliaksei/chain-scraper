@@ -1,8 +1,6 @@
-use std::time::SystemTime;
-
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-use web3::types::{Bytes, H160, H256, Index, U256, U64};
+use web3::types::{Bytes, H160, H256, Index, U256};
 
 use crate::parse::input_data::InputData;
 
@@ -42,14 +40,15 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(trx: web3::types::Transaction, input_data: InputData) -> Self {
-        let now: DateTime<Utc> = DateTime::from(SystemTime::now());
+    pub fn new(trx: crate::mongo::model::Transaction, input_data: InputData) -> Self {
+        let now: DateTime<Utc> = convert_to_date(trx.timestamp);
+
         Transaction {
             timestamp: now,
             hash: trx.hash,
             nonce: trx.nonce.as_u64(),
             block_hash: trx.block_hash,
-            block_number: trx.block_number.expect("Existing block").as_u64(),
+            block_number: trx.block_number.as_u64(),
             transaction_index: trx.transaction_index,
             from: trx.from,
             to: trx.to,
@@ -60,5 +59,27 @@ impl Transaction {
             raw: trx.raw,
             input_data,
         }
+    }
+}
+
+fn convert_to_date(timestamp: U256) -> DateTime<Utc> {
+    let ndt_utc = NaiveDateTime::from_timestamp(timestamp.as_u64() as i64, 0);
+
+    DateTime::from_utc(ndt_utc, Utc)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn convert_to_date() {
+        let time = web3::types::U256::from_str("5ff5bb64").unwrap();
+
+        let res = super::convert_to_date(time);
+
+        println!("{:?}", res);
     }
 }

@@ -1,14 +1,10 @@
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::str::FromStr;
 
-use anyhow::Result;
-use log::{debug, info};
-use serde::{Deserialize, Serialize};
+use log::debug;
 use tiny_keccak::{Hasher, Keccak};
 
-use crate::parse::contract_abi::{ContractAbi, ContractFunction, FunctionType, HasName, InOutType};
-use crate::parse::input_data::{InputData};
+use crate::parse::contract_abi::{ContractAbi, ContractFunction, FunctionType, HasName};
+use crate::parse::input_data::InputData;
 use serde_json::{Value, Map};
 
 use super::contract_abi::ValueType;

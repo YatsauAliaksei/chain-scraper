@@ -1,23 +1,18 @@
-use std::sync::Arc;
+use std::fmt::Debug;
 
-use actix_web::{FromRequest, HttpRequest};
-use actix_web::web::Payload;
-use anyhow::{bail, Error, Result};
-use futures::future::{ok, Ready};
+use anyhow::{bail, Result};
 use futures::StreamExt;
-use log::{debug, info};
+use log::{debug, info, warn};
 use mongodb::{bson, bson::doc, bson::Document, Client, Database};
-use mongodb::options::{ClientOptions, Credential, FindOneOptions, FindOptions, InsertManyOptions, StreamAddress};
+use mongodb::options::{ClientOptions, Credential, FindOneOptions, FindOptions, StreamAddress};
 use mongodb::results::{InsertManyResult, InsertOneResult};
-use serde::{Deserialize, Serialize};
-use web3::types::{Block, Transaction};
+use serde::Serialize;
 
-use crate::parse::contract_abi::ContractAbi;
-use crate::traversal::http::ChainData;
+use crate::mongo::model::{ChainDataDO, Transaction};
 
-pub mod model;
+pub(crate) mod model;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MongoDB {
     database: Database
 }
@@ -33,8 +28,39 @@ impl MongoDB {
         }
     }
 
+    pub async fn get_contracts(&self) -> Result<Vec<model::Contract>> {
+        let result: Vec<model::Contract> = self.find_all(model::Contract::COLLECTION_NAME, None, FindOptions::builder()
+            .batch_size(100)
+            .build()).await?;
+
+        info!("Found {} contracts", result.len());
+
+        Ok(result)
+    }
+
+    async fn find_all<D, FO, T>(&self, collection_name: &str, filter: D, find_opts: FO) -> Result<Vec<T>>
+        where
+            D: Into<Option<Document>> + Debug,
+            FO: Into<Option<FindOptions>>,
+            T: From<Document>
+    {
+        let collection = self.database.collection(collection_name);
+
+        let mut cursor = match collection.find(filter, find_opts).await {
+            Ok(r) => r,
+            _ => return Ok(vec![]),
+        };
+
+        let mut result = vec![];
+        while let Some(doc) = cursor.next().await {
+            debug!("{:?}", doc);
+            result.push(doc?.into());
+        }
+        Ok(result)
+    }
+
     pub async fn find_trx_to(&self, address: &str) -> Result<Vec<Transaction>> {
-        let collection = self.database.collection(model::Transaction::COLLECTION_NAME);
+        let collection = self.database.collection(Transaction::COLLECTION_NAME);
 
         let mut cursor = match collection.find(doc! {
             "to": address
@@ -49,7 +75,7 @@ impl MongoDB {
         let mut result = vec![];
         while let Some(doc) = cursor.next().await {
             debug!("{:?}", doc);
-            result.push(bson::from_document::<Transaction>(doc?)?);
+            result.push(doc?.into());
         }
 
         info!("Found {} trx related to address: {}", result.len(), address);
@@ -68,22 +94,38 @@ impl MongoDB {
         }
     }
 
-    pub async fn get_last_block(&self) -> Option<Document> {
+    pub async fn get_last_block(&self) -> Option<web3::types::Block<web3::types::Transaction>> {
         let find_options = FindOneOptions::builder()
             .sort(doc! {
                         "number": -1
                     }).build();
 
 
-        self.find_item(model::Block::COLLECTION_NAME, None, find_options).await
+        let doc = self.find_item(model::Block::COLLECTION_NAME, None, find_options).await;
+        if doc.is_none() {
+            return None;
+        }
+
+        match bson::from_document(doc.unwrap()) {
+            Ok(block) => Some(block),
+            Err(e) => {
+                warn!("failed to parse last block request result. {:?}", e);
+                None
+            }
+        }
     }
 
-    pub async fn save_chain_data(&self, chain_data: &ChainData) -> Result<Vec<InsertManyResult>> {
-        debug!("Saving: {}", chain_data);
+    pub async fn save_chain_data(&self, chain_data: &ChainDataDO) -> Result<Vec<InsertManyResult>> {
+        if chain_data.blocks.is_empty() {
+            info!("Nothing to save. Blocks size 0");
+            return Ok(vec![]);
+        }
+
+        info!("Saving: {}", chain_data);
 
         let mut res = vec![];
-        res.push(self.save_blocks(chain_data).await?);
-        res.push(self.save_transactions(chain_data).await?);
+        res.push(self.save_blocks(&chain_data.blocks).await?);
+        res.push(self.save_transactions(&chain_data.transactions).await?);
         Ok(res)
     }
 
@@ -98,39 +140,25 @@ impl MongoDB {
         }
     }
 
-    pub async fn save_transactions(&self, chain_data: &ChainData) -> Result<InsertManyResult> {
-        let raw_transactions: Vec<_> = chain_data.get_blocks().iter()
-            .map(|block| block.to_owned().get_block())
-            .flat_map(|block| block.transactions)
-            .collect();
-
-        self.insert_many(model::Transaction::COLLECTION_NAME, raw_transactions.iter()).await
+    pub async fn save_transactions(&self, transactions: &Vec<model::Transaction>) -> Result<InsertManyResult> {
+        self.insert_many(model::Transaction::COLLECTION_NAME, transactions.iter()).await
     }
 
-    pub async fn save_blocks(&self, chain_data: &ChainData) -> Result<InsertManyResult> {
-        let mut raw_blocks: Vec<_> = chain_data.get_blocks().iter()
-            .map(|block| block.to_owned().get_block())
-            .collect();
-
-        // removing transactions
-        for b in raw_blocks.iter_mut() {
-            b.transactions.clear()
-        }
-
-        self.insert_many(model::Block::COLLECTION_NAME, raw_blocks.iter()).await
+    pub async fn save_blocks(&self, blocks: &Vec<model::Block>) -> Result<InsertManyResult> {
+        self.insert_many(model::Block::COLLECTION_NAME, blocks.iter()).await
     }
 
     pub async fn insert_many<T: Serialize + 'static>(&self, collection_name: &str, items: impl IntoIterator<Item=&T>) -> Result<InsertManyResult> {
-        let collection = self.database.collection(collection_name);
-
         let items: Vec<_> = items.into_iter()
             .map(|v| { bson::to_document(v) })
             .map(std::result::Result::unwrap)
             .collect();
 
+        let collection = self.database.collection(collection_name);
+
         match collection.insert_many(items, None).await {
             mongodb::error::Result::Ok(r) => Ok(r),
-            mongodb::error::Result::Err(e) => bail!(e)
+            mongodb::error::Result::Err(e) => bail!(e),
         }
     }
 
@@ -203,11 +231,7 @@ mod tests {
 
         let mongo_db = MongoDB::new("localhost");
 
-        let doc = mongo_db.get_last_block().await.unwrap().into();
-
-        info!("search: {:?}", doc);
-
-        let block: web3::types::Block<web3::types::Transaction> = bson::from_document(doc).unwrap();
+        let block = mongo_db.get_last_block().await.unwrap();
 
         info!("Block result: {:?}", block);
 

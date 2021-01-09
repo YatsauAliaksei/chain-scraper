@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
-use actix_web::{App, HttpMessage, HttpRequest, HttpServer, middleware, post, Responder, web};
-use actix_web::dev::Server;
+use actix_web::{App, HttpServer, middleware, Responder, web};
 use actix_web::web::resource;
-use log::{debug, info};
+use log::{error, info};
+use mongodb::error::WriteError;
 
-use crate::db;
 use crate::es::ContractProcessor;
 use crate::mongo::model::Contract;
-use crate::mongo::MongoDB;
 use crate::parse::contract_abi::ContractAbi;
 
-pub async fn run_server(cp: ContractProcessor, port: u64) -> tokio::io::Result<()> {
-    let cp = Arc::new(cp);
+pub async fn run_server(cp: Arc<ContractProcessor>, port: u16) -> tokio::io::Result<()> {
     info!("Starting server on port: {}", port);
 
     let factory = move || {
@@ -34,7 +31,16 @@ async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<Contract
     info!("Parsed contract: {:?}", contract);
 
     tokio::spawn(async move {
-        cp.process_contract(&contract).await
+        let fun = async { cp.get_mongo().find_trx_to(&contract.address).await };
+        let _result = match cp.save_contract(&contract).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Unexpected error. {:?}", e);
+                return;
+            }
+        };
+        // todo: panic, error?
+        cp.process_contract(&contract, fun).await.expect("Success");
     });
 
     format!("ABI saved successfully. Address: {}", address)
