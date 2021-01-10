@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::ops::Range;
 
 use mongodb::bson;
@@ -7,7 +8,6 @@ use web3::types::{Bytes, H160, H2048, H256, H64, Index, U256, U64};
 
 use crate::parse::contract_abi::ContractAbi;
 use crate::traversal::ChainData;
-use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Contract {
@@ -174,6 +174,8 @@ impl Block {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Transaction {
+    #[serde(rename = "_id")]
+    pub id: H256,
     pub timestamp: U256,
     pub hash: H256,
     /// Nonce
@@ -218,6 +220,7 @@ impl From<Document> for Transaction {
 impl Transaction {
     pub fn new(trx: &web3::types::Transaction, timestamp: U256) -> Self {
         Transaction {
+            id: trx.hash.clone(),
             timestamp,
             hash: trx.hash,
             nonce: trx.nonce,

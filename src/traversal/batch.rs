@@ -46,7 +46,7 @@ fn create_ranges(range: &Range<u64>, batch_size: u64) -> Vec<Range<u64>> {
 
 pub async fn traversal(web3: Arc<Web3<Transport>>, mut range: Range<u64>, batch_size: u64) -> Option<ChainData> {
     if *TRAVERSE_IN_PROGRESS.lock().unwrap() {
-        debug!("Travers in progress");
+        info!("Travers in progress");
         return None;
     } else {
         *TRAVERSE_IN_PROGRESS.lock().unwrap() = true;
