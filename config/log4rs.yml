@@ -9,29 +9,29 @@ appenders:
             pattern: "{d(%H:%M:%S:%.3f)} {l} {t} - {m}{n}"
 
     # An appender named "chain_scraper" that writes to a file with a custom pattern encoder
-    chain_scraper:
+    file_appender:
         kind: file
-        path: "log/chain_scraper.log"
+        path: "log/file_appender.log"
         encoder:
-            pattern: "{d} - {m}{n}"
+            pattern: "{d(%H:%M:%S:%.3f)} {l} {t} - {m}{n}"
 
 # Set the default logging level to "warn" and attach the "stdout" appender to the root
 root:
     level: info
     appenders:
         - stdout
-        - chain_scraper
+        - file_appender
 
 loggers:
     # Raise the maximum log level for events sent to the "app::backend::db" logger to "info"
 #    app::backend::db:
 #        level: info
 
-    # Route log events sent to the "chain_scraper" logger/module to the "chain_scraper" appender,
+    # Route log events sent to the "chain_scraper" logger/module to the "file_appender" appender,
     # and *not* the normal appenders installed at the root
     chain_scraper:
         level: info
         appenders:
             - stdout
-            - chain_scraper
+            - file_appender
         additive: false
