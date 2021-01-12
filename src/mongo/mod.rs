@@ -94,10 +94,10 @@ impl MongoDB {
         }
     }
 
-    pub async fn get_last_block(&self) -> Option<web3::types::Block<web3::types::Transaction>> {
+    pub async fn get_last_block(&self) -> Option<model::Block> {
         let find_options = FindOneOptions::builder()
             .sort(doc! {
-                        "number": -1
+                        "_id": -1
                     }).build();
 
 
@@ -124,8 +124,8 @@ impl MongoDB {
         info!("Saving: {}", chain_data);
 
         let mut res = vec![];
-        res.push(self.save_blocks(&chain_data.blocks).await?);
-        res.push(self.save_transactions(&chain_data.transactions).await?);
+        res.extend(self.save_blocks(&chain_data.blocks).await?);
+        res.extend(self.save_transactions(&chain_data.transactions).await?);
         Ok(res)
     }
 
@@ -140,26 +140,34 @@ impl MongoDB {
         }
     }
 
-    pub async fn save_transactions(&self, transactions: &Vec<model::Transaction>) -> Result<InsertManyResult> {
+    pub async fn save_transactions(&self, transactions: &Vec<model::Transaction>) -> Result<Vec<InsertManyResult>> {
+        info!("Saving {} trx", transactions.len());
         self.insert_many(model::Transaction::COLLECTION_NAME, transactions.iter()).await
     }
 
-    pub async fn save_blocks(&self, blocks: &Vec<model::Block>) -> Result<InsertManyResult> {
+    pub async fn save_blocks(&self, blocks: &Vec<model::Block>) -> Result<Vec<InsertManyResult>> {
+        info!("Saving {} blocks", blocks.len());
         self.insert_many(model::Block::COLLECTION_NAME, blocks.iter()).await
     }
 
-    pub async fn insert_many<T: Serialize + 'static>(&self, collection_name: &str, items: impl IntoIterator<Item=&T>) -> Result<InsertManyResult> {
+    pub async fn insert_many<T: Serialize + 'static>(&self, collection_name: &str, items: impl IntoIterator<Item=&T>) -> Result<Vec<InsertManyResult>> {
         let items: Vec<_> = items.into_iter()
             .map(|v| { bson::to_document(v) })
             .map(std::result::Result::unwrap)
             .collect();
 
-        let collection = self.database.collection(collection_name);
+        let chunks = items.chunks(20000);
 
-        match collection.insert_many(items, None).await {
-            mongodb::error::Result::Ok(r) => Ok(r),
-            mongodb::error::Result::Err(e) => bail!(e),
+        let collection = self.database.collection(collection_name);
+        let mut res = vec![];
+        for chunk in chunks {
+            res.push(match collection.insert_many(chunk.to_vec(), None).await {
+                mongodb::error::Result::Ok(r) => r,
+                mongodb::error::Result::Err(e) => bail!(e),
+            })
         }
+
+        Ok(res)
     }
 
     pub async fn init(&self) -> Result<()> {

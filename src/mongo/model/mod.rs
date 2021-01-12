@@ -123,22 +123,6 @@ pub fn extract_transactions(block: &mut Block) -> Vec<Transaction> {
     transactions
 }
 
-
-/*pub fn create_block_trx_do(block: &web3::types::Block<web3::types::Transaction>) -> (Block, Vec<Transaction>) {
-    let mut block = Block::new(block);
-
-    let timestamp = block.timestamp;
-
-    let transactions = block.transactions;
-    block.transactions = vec![];
-
-    let transactions: Vec<Transaction> = transactions.into_iter()
-        .map(|t| Transaction::new(t, timestamp))
-        .collect();
-
-    (block, transactions)
-}
-*/
 impl Block {
     pub const COLLECTION_NAME: &'static str = "blocks";
 

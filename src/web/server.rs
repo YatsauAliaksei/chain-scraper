@@ -3,7 +3,6 @@ use std::sync::Arc;
 use actix_web::{App, HttpServer, middleware, Responder, web};
 use actix_web::web::resource;
 use log::{error, info};
-use mongodb::error::WriteError;
 
 use crate::es::ContractProcessor;
 use crate::mongo::model::Contract;
