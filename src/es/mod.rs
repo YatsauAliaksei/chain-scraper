@@ -41,7 +41,7 @@ impl ContractProcessor {
 
     pub async fn process_contract(&self, contract: &Contract, transactions_future: impl Future<Output=Result<Vec<Transaction>>>) -> Result<()> {
         // todo: improve to Batching
-        let transactions = transactions_future.await?;// self.mongo.find_trx_to(&contract.address).await?;
+        let transactions = transactions_future.await?;
         info!("Found {} trx for contract {}", transactions.len(), contract.address);
         let map = trx::create_id_method_map(&contract.abi_json);
 
