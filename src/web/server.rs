@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::sync::Arc;
 
 use actix_web::{App, HttpServer, middleware, Responder, web};
@@ -29,15 +30,22 @@ async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<Contract
 
     info!("Parsed contract: {:?}", contract);
 
+    let contract = Arc::new(contract);
+    let contract_cloned = contract.clone();
+    let cp_cloned = cp.clone();
+
+    match futures::executor::block_on(async {
+        cp_cloned.save_contract(&contract_cloned).await
+    }) {
+        Ok(res) => (),
+        Err(e) => {
+            error!("Failed to save contract. {:?}", e);
+            return "Failed to save contract".to_string();
+        }
+    };
+
     tokio::spawn(async move {
         let fun = async { cp.get_mongo().find_trx_to(&contract.address).await };
-        let _result = match cp.save_contract(&contract).await {
-            Ok(r) => r,
-            Err(e) => {
-                error!("Unexpected error. {:?}", e);
-                return;
-            }
-        };
         // todo: panic, error?
         cp.process_contract(&contract, fun).await.expect("Success");
     });

@@ -9,9 +9,9 @@ use anyhow::Result;
 use log::info;
 use structopt::StructOpt;
 
+use crate::error::setup_panic_handler;
 use crate::es::{ContractProcessor, Elastic};
 use crate::live::ScheduledScraper;
-use crate::error::setup_panic_handler;
 
 mod traversal;
 mod parse;
@@ -20,6 +20,7 @@ mod es;
 mod mongo;
 mod error;
 mod live;
+mod stream;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
@@ -70,13 +71,4 @@ struct Args {
 
     #[structopt(short = "i", long, default_value = "60")]
     update_interval_sec: u64,
-
-    // #[structopt(short, long, default_value = "0")]
-    // start_block: u64,
-
-    // #[structopt(short, long, default_value = "10000000")]
-    // end_block: u64,
-
-    // #[structopt(short, long, default_value = "100")]
-    // batch_size: u64,
 }
