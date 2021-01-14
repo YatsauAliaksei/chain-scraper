@@ -4,6 +4,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clokwerk::{Interval, ScheduleHandle, Scheduler};
+use futures::FutureExt;
+use futures_util::pin_mut;
+use futures_util::stream::StreamExt;
 use log::info;
 
 use crate::es::ContractProcessor;
@@ -66,37 +69,42 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
 
     info!("Last block number: {:?}", last_block);
 
-    let chain_data = crate::traversal::batch::traversal(web3, last_block..100_000_000_000, 100).await;
+    let mut stream = crate::traversal::batch::traversal(web3, last_block..100_000_000_000, 100).await;
 
-    if chain_data.is_some() {
-        let chain_data = chain_data.unwrap();
-        let chain_data = ChainDataDO::from(&chain_data);
+    let contracts: Vec<Contract> = mongodb.get_contracts().await?;
+    info!("Found contracts: {}", contracts.len());
 
-        mongodb.save_chain_data(&chain_data).await.expect("Wasn't able to save data to Mongo");
+    if stream.is_some() {
+        let stream = stream.unwrap();
 
-        let contracts: Vec<Contract> = mongodb.get_contracts().await?;
-        info!("Found contracts: {}", contracts.len());
+        pin_mut!(stream);
 
-        let mut address_trx: HashMap<String, Vec<Transaction>> = HashMap::new();
-        for trx in chain_data.transactions {
-            if trx.to.is_none() {
-                continue;
+        while let Some(chain_data) = stream.next().await {
+            let chain_data = ChainDataDO::from(&chain_data);
+
+            mongodb.save_chain_data(&chain_data).await.expect("Wasn't able to save data to Mongo");
+
+            let mut address_trx: HashMap<String, Vec<Transaction>> = HashMap::new();
+            for trx in chain_data.transactions {
+                if trx.to.is_none() {
+                    continue;
+                }
+
+                let to = format!("{:#x}", trx.to.unwrap());
+                let vec = address_trx.get_mut(&to);
+                if vec.is_some() {
+                    vec.unwrap().push(trx);
+                } else {
+                    let mut vec = vec![];
+                    vec.push(trx);
+                    address_trx.insert(to, vec);
+                }
             }
 
-            let to = format!("{:#x}", trx.to.unwrap());
-            let vec = address_trx.get_mut(&to);
-            if vec.is_some() {
-                vec.unwrap().push(trx);
-            } else {
-                let mut vec = vec![];
-                vec.push(trx);
-                address_trx.insert(to, vec);
-            }
-        }
-
-        for contract in &contracts {
-            if let Some(trx_to_save) = address_trx.remove(&contract.address) {
-                contract_processor.process_contract(contract, async { Ok(trx_to_save) }).await.expect("Success");
+            for contract in &contracts {
+                if let Some(trx_to_save) = address_trx.remove(&contract.address) {
+                    contract_processor.process_contract(contract, async { Ok(trx_to_save) }).await.expect("Success");
+                }
             }
         }
     } else {
