@@ -1,13 +1,10 @@
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
-use std::task::Waker;
 use std::time::Instant;
 
 use anyhow::Result;
 use futures::Future;
-use futures::task::Context;
 use log::{debug, info, trace, warn};
-use tokio::macros::support::{Pin, Poll};
 use tokio::stream::Stream;
 use web3::futures::TryFutureExt;
 use web3::types::U64;
@@ -76,10 +73,7 @@ async fn traversal_parallel(web3: Arc<Web3<Transport>>, init_range: Range<u64>, 
 
     info!("Range: {:?}. {} ranges started with size: {}. Sub range size: {}", init_range, ranges.len(), size, batch_size);
 
-    let total_time = Instant::now();
-
     async_stream::stream! {
-        // let mut result = vec![];
         for range in ranges {
             let web3 = web3.clone();
             let range_start_time = Instant::now();
@@ -97,63 +91,10 @@ async fn traversal_parallel(web3: Arc<Web3<Transport>>, init_range: Range<u64>, 
             info!("Range {:?} finished. {} sub-ranges processed in {}ms. Blocks found : {}", range, sub_ranges_len, (Instant::now() - range_start_time).as_millis(), blocks.len());
 
             yield ChainData::new(range, blocks);
-            // result.extend(blocks);
         }
     }
-
-    // info!("Total spent time: {:?}", Instant::now() - total_time);
-
-    // ChainData::new(init_range, vec![])
 }
 
-/*type ChainDataFuture = Pin<Box<dyn Future<Output=Vec<BlockExtended>> + Send>>;
-
-struct MyStream {
-    jobs: Vec<Vec<ChainDataFuture>>,
-    waker: Option<Arc<Mutex<Waker>>>,
-}
-
-impl Stream for MyStream {
-    type Item = ();
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.jobs.is_empty() {
-            return Poll::Ready(None);
-        }
-
-        if let Some(waker) = &self.waker {
-            let mut waker = waker.lock().unwrap();
-            if !waker.will_wake(cx.waker()) {
-                *waker = cx.waker().clone();
-            }
-        } else {
-            let waker = Arc::new(Mutex::new(cx.waker().clone()));
-            self.waker = Some(waker.clone());
-        }
-
-        let job = self.jobs.remove(0);
-
-        self.process(job);
-
-        Poll::Pending
-    }
-}
-
-impl MyStream {
-    async fn process(&self, job: Vec<ChainDataFuture>) {
-        // tokio_stream::StreamExt
-        // async_stream::stream!()
-        // This is the first time `poll` is called, spawn the timer thread.
-        tokio::spawn(async move {
-            let res = join_parallel(job.into_iter()).await;
-            // The duration has elapsed. Notify the caller by invoking
-            // the waker.
-            let waker = self.waker.unwrap().lock().unwrap();
-            waker.wake_by_ref();
-        });
-    }
-}
-*/
 async fn process_range(range: Range<u64>, web3: Arc<Web3<Transport>>) -> Vec<BlockExtended> {
     let mut blocks = vec![];
 
@@ -219,8 +160,8 @@ mod tests {
         let mongo_db = Arc::new(MongoDB::new("localhost"));
 
         // todo: think on streaming instead of bulk op
-        let web3 = Arc::new(crate::traversal::connection::create_web3(url).await);
-        let cd = super::traversal(web3, range, batch_size).await?;
+        let web3 = Arc::new(crate::traversal::connection::create_web3("ws://localhost:8546").await);
+        let cd = super::traversal(web3, range, batch_size).await.unwrap();
 
         println!("Total time: {:?}", (std::time::Instant::now() - start_time).as_secs());
 

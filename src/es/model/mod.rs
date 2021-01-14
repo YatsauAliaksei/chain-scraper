@@ -40,7 +40,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(trx: crate::mongo::model::Transaction, input_data: InputData) -> Self {
+    pub fn new(trx: &crate::mongo::model::Transaction, input_data: InputData) -> Self {
         let now: DateTime<Utc> = convert_to_date(trx.timestamp);
 
         Transaction {
@@ -55,8 +55,8 @@ impl Transaction {
             value: trx.value.as_u64(),
             gas_price: trx.gas_price.as_u64(),
             gas: trx.gas.as_u64(),
-            input: trx.input,
-            raw: trx.raw,
+            input: trx.input.clone(),
+            raw: trx.raw.clone(),
             input_data,
         }
     }

@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use anyhow::{bail, Result};
 use futures::StreamExt;
-use log::{debug, info, warn};
-use mongodb::{bson, bson::doc, bson::Document, Client, Database};
+use log::{debug, info, warn, error};
+use mongodb::{bson, bson::doc, bson::Document, Client, Cursor, Database};
 use mongodb::options::{ClientOptions, Credential, FindOneOptions, FindOptions, StreamAddress};
 use mongodb::results::{InsertManyResult, InsertOneResult};
 use serde::Serialize;
@@ -59,28 +59,31 @@ impl MongoDB {
         Ok(result)
     }
 
-    pub async fn find_trx_to(&self, address: &str) -> Result<Vec<Transaction>> {
+    pub async fn find_trx_to(&self, address: &str, batch_size: u32) -> Result<Cursor> {
         let collection = self.database.collection(Transaction::COLLECTION_NAME);
 
-        let mut cursor = match collection.find(doc! {
+        match collection.find(doc! {
             "to": address
         }, FindOptions::builder()
-            .batch_size(100)
+            .batch_size(batch_size)
             .build(),
         ).await {
-            Ok(r) => r,
-            _ => return Ok(vec![]),
-        };
-
-        let mut result = vec![];
-        while let Some(doc) = cursor.next().await {
-            debug!("{:?}", doc);
-            result.push(doc?.into());
+            Ok(r) => Ok(r),
+            Err(e) => {
+                error!("Fetching failed. {:?}", e);
+                return Err(e.into());
+            }
         }
 
-        info!("Found {} trx related to address: {}", result.len(), address);
+        // let mut result = vec![];
+        // while let Some(doc) = cursor.next().await {
+        //     debug!("{:?}", doc);
+        //     result.push(doc?.into());
+        // }
 
-        Ok(result)
+        // info!("Found {} trx related to address: {}", result.len(), address);
+
+        // Ok(result)
     }
 
     pub async fn find_item(&self, collection_name: &str,
@@ -221,6 +224,7 @@ pub fn take_db(url: &str) -> Database {
 mod tests {
     use std::fmt::LowerHex;
 
+    use futures::stream::StreamExt;
     use log::info;
     use mongodb::{bson, bson::doc, bson::Document};
     use mongodb::options::{CreateCollectionOptions, DatabaseOptions, FindOneOptions, IndexOptionDefaults};
@@ -253,16 +257,20 @@ mod tests {
         crate::error::setup_panic_handler();
         log4rs::init_file("config/log4rs.yml", Default::default()).unwrap();
 
-        let trx_to = "0x7001ea1ca8c28aa90a0d2e8b034aa56319ff0a7e";
+        let trx_to = "0xf12b5dd4ead5f743c6baa640b0216200e89b60da";
 
         let mongo_db = MongoDB::new("localhost");
-        let items = mongo_db.find_trx_to(trx_to).await?;
+        let mut items = mongo_db.find_trx_to(trx_to, 100).await?;
 
         info!("Result: {:?}", items);
 
-        assert!(items.len() > 0);
-        assert!(items[0].to.is_some());
-        assert_eq!(format!("{:#x}", items[0].to.unwrap()), trx_to);
+        info!("Data: {:?}", items.next().await);
+        info!("Data: {:?}", items.next().await);
+        info!("Data: {:?}", items.next().await);
+
+        // assert!(items.len() > 0);
+        // assert!(items[0].to.is_some());
+        // assert_eq!(format!("{:#x}", items[0].to.unwrap()), trx_to);
 
         Ok(())
     }

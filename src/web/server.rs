@@ -1,8 +1,8 @@
-use std::error::Error;
 use std::sync::Arc;
 
 use actix_web::{App, HttpServer, middleware, Responder, web};
 use actix_web::web::resource;
+use futures::stream::StreamExt;
 use log::{error, info};
 
 use crate::es::ContractProcessor;
@@ -37,7 +37,7 @@ async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<Contract
     match futures::executor::block_on(async {
         cp_cloned.save_contract(&contract_cloned).await
     }) {
-        Ok(res) => (),
+        Ok(_res) => (),
         Err(e) => {
             error!("Failed to save contract. {:?}", e);
             return "Failed to save contract".to_string();
@@ -45,9 +45,30 @@ async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<Contract
     };
 
     tokio::spawn(async move {
-        let fun = async { cp.get_mongo().find_trx_to(&contract.address).await };
-        // todo: panic, error?
-        cp.process_contract(&contract, fun).await.expect("Success");
+        let batch_size = 10_000usize;
+        info!("Starting saving trx to es for contract: {}", contract.address);
+
+        let mut cursor = cp.get_mongo().find_trx_to(&contract.address, batch_size as u32).await.expect("Cursor expected");
+
+        let mut bucket = Vec::with_capacity(batch_size as usize);
+        let mut total = 0;
+
+        while let Some(data) = cursor.next().await {
+            bucket.push(data.unwrap().into());
+
+            if bucket.len() == batch_size {
+                cp.process_contract(&contract, bucket.iter()).await.unwrap();
+                total += batch_size;
+                bucket.clear();
+            }
+        }
+
+        if bucket.len() > 0 {
+            cp.process_contract(&contract, bucket.iter()).await.unwrap();
+            total += bucket.len();
+        }
+
+        info!("ES data saved. Size: {}", total);
     });
 
     format!("ABI saved successfully. Address: {}", address)

@@ -5,8 +5,8 @@ use serde_json::{Map, Value};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InputData {
-    method_name: String,
-    args: Map<String, Value>,
+    pub method_name: String,
+    pub args: Map<String, Value>,
 }
 
 impl InputData {

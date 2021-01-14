@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use clokwerk::{Interval, ScheduleHandle, Scheduler};
-use futures::FutureExt;
 use futures_util::pin_mut;
 use futures_util::stream::StreamExt;
 use log::info;
@@ -69,7 +68,9 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
 
     info!("Last block number: {:?}", last_block);
 
-    let mut stream = crate::traversal::batch::traversal(web3, last_block..100_000_000_000, 100).await;
+    let total_time = Instant::now();
+
+    let stream = crate::traversal::batch::traversal(web3, last_block..100_000_000_000, 100).await;
 
     let contracts: Vec<Contract> = mongodb.get_contracts().await?;
     info!("Found contracts: {}", contracts.len());
@@ -103,13 +104,16 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
 
             for contract in &contracts {
                 if let Some(trx_to_save) = address_trx.remove(&contract.address) {
-                    contract_processor.process_contract(contract, async { Ok(trx_to_save) }).await.expect("Success");
+                    contract_processor.process_contract(contract, trx_to_save.iter()).await.expect("Success");
                 }
             }
         }
+
     } else {
         info!("No blocks found since {} block", last_block);
     }
+
+    info!("Total spent time: {:?}", Instant::now() - total_time);
 
     *crate::traversal::batch::TRAVERSE_IN_PROGRESS.lock().unwrap() = false;
 

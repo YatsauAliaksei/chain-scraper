@@ -123,6 +123,7 @@ mod tests {
     use std::collections::hash_map::RandomState;
     use std::collections::HashMap;
     use std::str::FromStr;
+    use log::info;
 
     use super::*;
 
@@ -189,8 +190,8 @@ mod tests {
         let input_data = super::parse_trx(&id_method, SUBMIT_TRX_HEX);
         info!("Result: {:?}", input_data);
 
-        assert_eq!("submit", input_data.method_name());
-        assert_eq!(format!("{:?}", input_data.args().get("clientData").unwrap()), r#"{"tax":132,"number":"UUID-1234"}"#);
-        assert_eq!(format!("{:?}", input_data.args().get("userData").unwrap()), r#"{"id":132,"name":"Alex"}"#);
+        assert_eq!("submit", input_data.method_name);
+        assert_eq!(format!("{:?}", input_data.args.get("clientData").unwrap()), r#"{"tax":132,"number":"UUID-1234"}"#);
+        assert_eq!(format!("{:?}", input_data.args.get("userData").unwrap()), r#"{"id":132,"name":"Alex"}"#);
     }
 }

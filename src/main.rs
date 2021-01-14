@@ -6,7 +6,6 @@ extern crate lazy_static;
 use std::sync::Arc;
 
 use anyhow::Result;
-use log::info;
 use structopt::StructOpt;
 
 use crate::error::setup_panic_handler;
@@ -20,7 +19,6 @@ mod es;
 mod mongo;
 mod error;
 mod live;
-mod stream;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
