@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use anyhow::{bail, Result};
 use futures::StreamExt;
-use log::{debug, info, warn, error};
+use log::{debug, error, info, warn};
 use mongodb::{bson, bson::doc, bson::Document, Client, Cursor, Database};
 use mongodb::options::{ClientOptions, Credential, FindOneOptions, FindOptions, StreamAddress};
 use mongodb::results::{InsertManyResult, InsertOneResult};
@@ -118,18 +118,25 @@ impl MongoDB {
         }
     }
 
-    pub async fn save_chain_data(&self, chain_data: &ChainDataDO) -> Result<Vec<InsertManyResult>> {
+    pub async fn save_chain_data(&self, chain_data: &ChainDataDO) -> Result<()> {
         if chain_data.blocks.is_empty() {
             info!("Nothing to save. Blocks size 0");
-            return Ok(vec![]);
+            return Ok(());
         }
 
         info!("Saving: {}", chain_data);
 
-        let mut res = vec![];
-        res.extend(self.save_blocks(&chain_data.blocks).await?);
-        res.extend(self.save_transactions(&chain_data.transactions).await?);
-        Ok(res)
+        let result = tokio::join!(
+            self.save_blocks(&chain_data.blocks),
+            self.save_transactions(&chain_data.transactions),
+        );
+
+        match result {
+            (Ok(_), Ok(_)) => Ok(()),
+            (Ok(_), Err(e)) => Err(e),
+            (Err(e), Ok(_)) => Err(e),
+            (Err(e), Err(_)) => Err(e),
+        }
     }
 
     pub async fn save_contract(&self, contract: &model::Contract) -> Result<InsertOneResult> {

@@ -86,6 +86,9 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
             mongodb.save_chain_data(&chain_data).await.expect("Wasn't able to save data to Mongo");
 
             let mut address_trx: HashMap<String, Vec<Transaction>> = HashMap::new();
+
+            if contracts.is_empty() { continue; }
+
             for trx in chain_data.transactions {
                 if trx.to.is_none() {
                     continue;
@@ -108,7 +111,6 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
                 }
             }
         }
-
     } else {
         info!("No blocks found since {} block", last_block);
     }

@@ -78,7 +78,7 @@ async fn traversal_parallel(web3: Arc<Web3<Transport>>, init_range: Range<u64>, 
             let web3 = web3.clone();
             let range_start_time = Instant::now();
 
-            let sub_ranges = create_ranges(&range, 100);
+            let sub_ranges = create_ranges(&range, batch_size);
             let sub_ranges_len = sub_ranges.len();
 
             let jobs: Vec<_> = sub_ranges.into_iter()
