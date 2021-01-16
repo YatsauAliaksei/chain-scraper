@@ -41,7 +41,6 @@ fn dynamic_type(trx_raw_input: &str, offset: usize) -> Map<String, Value> {
 }
 
 fn get_method_id(signature: &str) -> String {
-    // let mut sha = Sha3::v256();
     let mut sha = Keccak::v256();
 
     sha.update(signature.as_bytes());

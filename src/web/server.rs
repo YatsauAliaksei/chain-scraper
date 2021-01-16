@@ -45,7 +45,7 @@ async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<Contract
     };
 
     tokio::spawn(async move {
-        let batch_size = 10_000usize;
+        let batch_size = 10_000 as usize;
         info!("Starting saving trx to es for contract: {}", contract.address);
 
         let mut cursor = cp.get_mongo().find_trx_to(&contract.address, batch_size as u32).await.expect("Cursor expected");
