@@ -7,10 +7,10 @@ use futures::Future;
 use log::{debug, info, trace, warn};
 use tokio::stream::Stream;
 use web3::futures::TryFutureExt;
-use web3::types::U64;
+use web3::types::{U64, Block, Transaction};
 use web3::Web3;
 
-use crate::traversal::{BlockExtended, ChainData};
+use crate::traversal::ChainData;
 use crate::traversal::connection::Transport;
 
 lazy_static! {
@@ -95,7 +95,7 @@ async fn traversal_parallel(web3: Arc<Web3<Transport>>, init_range: Range<u64>, 
     }
 }
 
-async fn process_range(range: Range<u64>, web3: Arc<Web3<Transport>>) -> Vec<BlockExtended> {
+async fn process_range(range: Range<u64>, web3: Arc<Web3<Transport>>) -> Vec<Block<Transaction>> {
     let mut blocks = vec![];
 
     debug!("Starting range: {:?}", range);
@@ -121,7 +121,7 @@ async fn process_range(range: Range<u64>, web3: Arc<Web3<Transport>>) -> Vec<Blo
 
         if !block.transactions.is_empty() {
             trace!("Found block [{}] with {} trx", block.number.unwrap(), block.transactions.len());
-            blocks.push(block.into());
+            blocks.push(block);
         }
     }
 

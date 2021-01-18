@@ -3,31 +3,14 @@ use std::ops::Range;
 
 use web3::types::{Block, Transaction};
 
-#[derive(Debug, Clone)]
-pub struct BlockExtended {
-    block: Block<Transaction>,
-}
-
-impl BlockExtended {
-    pub fn get_block(&self) -> &Block<Transaction> {
-        &self.block
-    }
-}
-
-impl From<Block<Transaction>> for BlockExtended {
-    fn from(block: Block<Transaction>) -> Self {
-        BlockExtended { block }
-    }
-}
-
 #[derive(Debug)]
 pub struct ChainData {
     pub range: Range<u64>,
-    pub blocks: Vec<BlockExtended>,
+    pub blocks: Vec<Block<Transaction>>,
 }
 
 impl ChainData {
-    pub fn new(range: Range<u64>, blocks: Vec<BlockExtended>) -> Self {
+    pub fn new(range: Range<u64>, blocks: Vec<Block<Transaction>>) -> Self {
         ChainData {
             range,
             blocks,

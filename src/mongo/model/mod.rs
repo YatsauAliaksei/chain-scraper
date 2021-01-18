@@ -232,7 +232,7 @@ pub struct ChainDataDO {
 impl From<&ChainData> for ChainDataDO {
     fn from(cd: &ChainData) -> Self {
         let mut blocks: Vec<Block> = cd.blocks.iter()
-            .map(|b| b.get_block().into())
+            .map(|b| b.into())
             .collect();
 
         let transactions = blocks.iter_mut()
