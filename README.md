@@ -38,7 +38,7 @@ CQRS:
 - [ ] Parse transaction
     - [ ] contract invocation. Method call
         - [ ] from contract
-        - [ ] to contract
+        - [x] to contract
     - [ ] (Optional) contract creation
         - [ ] (Optional) decompile from ABI 'eth_getCode'. As sample https://github.com/eveem-org/panoramix
     - [ ] (Optional) ETH move
@@ -50,8 +50,8 @@ CQRS:
 
 - [x] support contract Json representation upload
 - [x] parse Json to create domain object
-- [ ] lookup by contract
-    - [ ] find all trx related to contract
+- [x] lookup by contract
+    - [x] find all trx related to contract
 
 ### Web
 
@@ -64,7 +64,7 @@ CQRS:
 
 - - - - 
 
-- [ ] handle new blocks at runtime
+- [x] handle new blocks at runtime
 
 ### DB
 
@@ -78,4 +78,4 @@ CQRS:
 
 - [ ] Basic web GUI
     - [ ] consider [Flutter](https://flutter.dev/)
-    - [ ] Kibana + Elastic Search
+    - [x] Kibana + Elastic Search
