@@ -5,7 +5,7 @@ use futures::StreamExt;
 use log::{debug, error, info, warn};
 use mongodb::{bson, bson::doc, bson::Document, Client, Cursor, Database};
 use mongodb::options::{ClientOptions, Credential, FindOneOptions, FindOptions, StreamAddress};
-use mongodb::results::{InsertManyResult, InsertOneResult};
+use mongodb::results::{InsertManyResult, InsertOneResult, UpdateResult};
 use serde::Serialize;
 
 use crate::mongo::model::{ChainDataDO, Transaction};
@@ -74,16 +74,6 @@ impl MongoDB {
                 return Err(e.into());
             }
         }
-
-        // let mut result = vec![];
-        // while let Some(doc) = cursor.next().await {
-        //     debug!("{:?}", doc);
-        //     result.push(doc?.into());
-        // }
-
-        // info!("Found {} trx related to address: {}", result.len(), address);
-
-        // Ok(result)
     }
 
     pub async fn find_item(&self, collection_name: &str,
@@ -101,6 +91,27 @@ impl MongoDB {
         let find_options = FindOneOptions::builder()
             .sort(doc! {
                         "_id": -1
+                    }).build();
+
+
+        let doc = self.find_item(model::Block::COLLECTION_NAME, None, find_options).await;
+        if doc.is_none() {
+            return None;
+        }
+
+        match bson::from_document(doc.unwrap()) {
+            Ok(block) => Some(block),
+            Err(e) => {
+                warn!("failed to parse last block request result. {:?}", e);
+                None
+            }
+        }
+    }
+
+    pub async fn get_first_block(&self) -> Option<model::Block> {
+        let find_options = FindOneOptions::builder()
+            .sort(doc! {
+                        "_id": 1
                     }).build();
 
 
@@ -145,6 +156,19 @@ impl MongoDB {
         debug!("Saving contract {:?}", contract);
 
         match contracts.insert_one(bson::to_document(contract)?, None).await {
+            mongodb::error::Result::Ok(r) => Ok(r),
+            mongodb::error::Result::Err(e) => bail!(e)
+        }
+    }
+
+    pub async fn update_contract(&self, contract: &model::Contract) -> Result<UpdateResult> {
+        let contracts = self.database.collection(model::Contract::COLLECTION_NAME);
+
+        debug!("Updating contract {:?}", contract);
+
+        match contracts.update_one(doc! {
+                        "_id": &contract.id
+                    }, bson::to_document(contract)?, None).await {
             mongodb::error::Result::Ok(r) => Ok(r),
             mongodb::error::Result::Err(e) => bail!(e)
         }
@@ -278,6 +302,27 @@ mod tests {
         // assert!(items.len() > 0);
         // assert!(items[0].to.is_some());
         // assert_eq!(format!("{:#x}", items[0].to.unwrap()), trx_to);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_contract() -> Result<()> {
+        crate::error::setup_panic_handler();
+        log4rs::init_file("config/log4rs.yml", Default::default()).unwrap();
+
+        let trx_to = "0xf12b5dd4ead5f743c6baa640b0216200e89b60da";
+
+        let mongo_db = MongoDB::new("localhost");
+        let mut contract = mongo_db.get_contracts().await.unwrap().remove(0);
+
+        info!("Updating: {:?}", contract);
+
+        contract.processed_range = Some(1..10);
+
+        let res = mongo_db.update_contract(&contract).await;
+
+        info!("Res: {:?}", res.unwrap());
 
         Ok(())
     }

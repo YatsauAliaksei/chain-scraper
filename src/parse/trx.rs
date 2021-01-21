@@ -49,7 +49,7 @@ fn get_method_id(signature: &str) -> String {
     hex::encode(hash)
 }
 
-pub fn parse_trx(id_method: &HashMap<String, &ContractFunction>, trx_raw_input: &str) -> InputData {
+pub fn parse_trx(id_method: &HashMap<String, &ContractFunction>, trx_raw_input: &str) -> Option<InputData> {
     let trx_raw_input = trx_raw_input.strip_prefix("0x").unwrap_or(trx_raw_input);
     debug!("input: {:?}", trx_raw_input);
 
@@ -57,7 +57,11 @@ pub fn parse_trx(id_method: &HashMap<String, &ContractFunction>, trx_raw_input: 
     let method_id = &trx_raw_input[offset..8];
     offset += 8;
 
-    let function = id_method.get(&method_id.to_string()).expect(&format!("method expected: {}", method_id));
+    let function = match id_method.get(&method_id.to_string()) {
+        Some(f) => f,
+        None => return None,
+    };
+    // .expect(&format!("method expected: {}", method_id));
 
     debug!("Method: {:?}", function);
     let mut args = Map::with_capacity(function.inputs.len());
@@ -77,7 +81,7 @@ pub fn parse_trx(id_method: &HashMap<String, &ContractFunction>, trx_raw_input: 
         args.insert(input.name.clone(), value);
     }
 
-    InputData::new(function.name.clone().as_str(), args)
+    Some(InputData::new(function.name.clone().as_str(), args))
 }
 
 fn build_method_sig(function: &ContractFunction) -> Option<String> {
@@ -186,7 +190,7 @@ mod tests {
 
         info!("map: {:?}", id_method);
 
-        let input_data = super::parse_trx(&id_method, SUBMIT_TRX_HEX);
+        let input_data = super::parse_trx(&id_method, SUBMIT_TRX_HEX).unwrap();
         info!("Result: {:?}", input_data);
 
         assert_eq!("submit", input_data.method_name);

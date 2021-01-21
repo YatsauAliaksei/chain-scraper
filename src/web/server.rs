@@ -22,7 +22,6 @@ pub async fn run_server(cp: Arc<ContractProcessor>, port: u16) -> tokio::io::Res
     HttpServer::new(factory).bind(format!("0.0.0.0:{}", port))?.run().await
 }
 
-// todo: handle parsing errors
 async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<ContractAbi>, cp: web::Data<Arc<ContractProcessor>>) -> impl Responder {
     info!("Received /abi/upload/{}", address);
 
@@ -43,33 +42,6 @@ async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<Contract
             return "Failed to save contract".to_string();
         }
     };
-
-    tokio::spawn(async move {
-        let batch_size = 10_000 as usize;
-        info!("Starting saving trx to es for contract: {}", contract.address);
-
-        let mut cursor = cp.get_mongo().find_trx_to(&contract.address, batch_size as u32).await.expect("Cursor expected");
-
-        let mut bucket = Vec::with_capacity(batch_size as usize);
-        let mut total = 0;
-
-        while let Some(data) = cursor.next().await {
-            bucket.push(data.unwrap().into());
-
-            if bucket.len() == batch_size {
-                cp.process_contract(&contract, bucket.iter()).await.unwrap();
-                total += batch_size;
-                bucket.clear();
-            }
-        }
-
-        if bucket.len() > 0 {
-            cp.process_contract(&contract, bucket.iter()).await.unwrap();
-            total += bucket.len();
-        }
-
-        info!("ES data saved. Size: {}", total);
-    });
 
     format!("ABI saved successfully. Address: {}", address)
 }

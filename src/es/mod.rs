@@ -46,9 +46,13 @@ impl ContractProcessor {
 
         let data = transactions
             .map(|t| {
-                let input = trx::parse_trx(&map, t.input.0.to_hex::<String>().as_ref());
-                model::Transaction::new(&t, input)
+                match trx::parse_trx(&map, t.input.0.to_hex::<String>().as_ref()) {
+                    Some(input) => Some(model::Transaction::new(&t, input)),
+                    None => None,
+                }
             })
+            .filter(Option::is_some)
+            .map(Option::unwrap)
             .collect();
 
         let res = self.elastic.save_trx(data).await?;

@@ -1,4 +1,5 @@
 use std::ops::Range;
+use std::slice::Iter;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -7,7 +8,7 @@ use futures::Future;
 use log::{debug, info, trace, warn};
 use tokio::stream::Stream;
 use web3::futures::TryFutureExt;
-use web3::types::{U64, Block, Transaction};
+use web3::types::{Block, Transaction, U64};
 use web3::Web3;
 
 use crate::traversal::ChainData;
@@ -45,7 +46,7 @@ fn create_ranges(range: &Range<u64>, batch_size: u64) -> Vec<Range<u64>> {
     batches
 }
 
-pub async fn traversal(web3: Arc<Web3<Transport>>, mut range: Range<u64>, batch_size: u64) -> Option<impl Stream<Item=ChainData>> {
+pub async fn traversal(web3: Arc<Web3<Transport>>, to_addresses: Vec<String>, mut range: &mut Range<u64>, batch_size: u64) -> Option<impl Stream<Item=ChainData>> {
     if *TRAVERSE_IN_PROGRESS.lock().unwrap() {
         info!("Travers in progress");
         return None;
@@ -64,14 +65,16 @@ pub async fn traversal(web3: Arc<Web3<Transport>>, mut range: Range<u64>, batch_
         info!("Range changed to align last block in chain. {:?}", range);
     }
 
-    Some(traversal_parallel(web3, range, batch_size).await)
+    Some(traversal_parallel(web3, to_addresses, range, batch_size).await)
 }
 
-async fn traversal_parallel(web3: Arc<Web3<Transport>>, init_range: Range<u64>, batch_size: u64) -> impl Stream<Item=ChainData> {
+async fn traversal_parallel(web3: Arc<Web3<Transport>>, to_addresses: Vec<String>, init_range: &Range<u64>, batch_size: u64) -> impl Stream<Item=ChainData> {
     let size = 10_000;
-    let ranges = create_ranges(&init_range, size);
+    let mut ranges = create_ranges(&init_range, size);
+    ranges.reverse();
 
     info!("Range: {:?}. {} ranges started with size: {}. Sub range size: {}", init_range, ranges.len(), size, batch_size);
+    info!("Looking for contracts related trxs: {:?}", to_addresses);
 
     async_stream::stream! {
         for range in ranges {
@@ -87,6 +90,21 @@ async fn traversal_parallel(web3: Arc<Web3<Transport>>, init_range: Range<u64>, 
                 }).collect();
 
             let blocks = join_parallel(jobs.into_iter()).await;
+
+            let blocks: Vec<_> = blocks.into_iter()
+                .filter(|b| {
+                    b.transactions.iter()
+                        .any(|t| {
+                            if t.to.is_some() {
+                                let to = crate::parse::h160_to_address(t.to.as_ref());
+                                // info!("Trx: {:?}", to);
+                                return to_addresses.contains(&to.to_lowercase());
+                            }
+                            return false;
+                        })
+
+                })
+                .collect();
 
             info!("Range {:?} finished. {} sub-ranges processed in {}ms. Blocks found : {}", range, sub_ranges_len, (Instant::now() - range_start_time).as_millis(), blocks.len());
 
@@ -153,7 +171,7 @@ mod tests {
 
         log4rs::init_file("config/log4rs.yml", Default::default()).unwrap();
 
-        let range = 170000..173000;
+        let mut range = 170000..173000;
         let batch_size = 100;
 
         let start_time = std::time::Instant::now();
@@ -161,7 +179,7 @@ mod tests {
 
         // todo: think on streaming instead of bulk op
         let web3 = Arc::new(crate::traversal::connection::create_web3("ws://localhost:8546").await);
-        let cd = super::traversal(web3, range, batch_size).await.unwrap();
+        let cd = super::traversal(web3, vec![], &mut range, batch_size).await.unwrap();
 
         println!("Total time: {:?}", (std::time::Instant::now() - start_time).as_secs());
 

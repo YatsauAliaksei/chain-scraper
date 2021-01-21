@@ -14,6 +14,8 @@ pub struct Contract {
     #[serde(rename = "_id")]
     pub id: String,
     pub address: String,
+    pub create_block: Option<i64>,
+    pub processed_range: Option<Range<i64>>,
     pub abi_json: ContractAbi,
 }
 
@@ -28,8 +30,10 @@ impl Contract {
 
     pub fn new(address: &str, abi_json: ContractAbi) -> Self {
         Contract {
-            id: address.into(),
-            address: address.into(),
+            id: address.to_string().to_lowercase(),
+            address: address.to_string().to_lowercase(),
+            create_block: None,
+            processed_range: None,
             abi_json,
         }
     }

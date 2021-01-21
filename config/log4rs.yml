@@ -29,6 +29,13 @@ loggers:
 
     # Route log events sent to the "chain_scraper" logger/module to the "file_appender" appender,
     # and *not* the normal appenders installed at the root
+    actix_web::middleware::logger:
+        level: debug
+        appenders:
+            - stdout
+            - file_appender
+        additive: false
+
     chain_scraper:
         level: info
         appenders:
