@@ -16,8 +16,8 @@ fn parse_address(trx_raw_input: &str, offset: usize) -> String {
     String::from(&trx_raw_input[offset + 24..offset + BYTE_LENGTH])
 }
 
-fn parse_int(trx_raw_input: &str, offset: usize) -> u64 {
-    u64::from_str_radix(&trx_raw_input[offset..offset + BYTE_LENGTH], 16).expect("u64 in hex")
+fn parse_int(trx_raw_input: &str, offset: usize) -> i64 {
+    i64::from_str_radix(&trx_raw_input[offset..offset + BYTE_LENGTH], 16).unwrap_or(i64::MAX)
 }
 
 fn parse_bool(trx_raw_input: &str, offset: usize) -> bool {
@@ -196,5 +196,32 @@ mod tests {
         assert_eq!("submit", input_data.method_name);
         assert_eq!(format!("{:?}", input_data.args.get("clientData").unwrap()), r#"{"tax":132,"number":"UUID-1234"}"#);
         assert_eq!(format!("{:?}", input_data.args.get("userData").unwrap()), r#"{"id":132,"name":"Alex"}"#);
+    }
+
+    const ETH: &str = r###"[{"constant":false,"inputs":[{"name":"newImplementation","type":"address"}],"name":"upgradeTo","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"newImplementation","type":"address"},{"name":"data","type":"bytes"}],"name":"upgradeToAndCall","outputs":[],"payable":true,"stateMutability":"payable","type":"function"},{"constant":true,"inputs":[],"name":"implementation","outputs":[{"name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"newAdmin","type":"address"}],"name":"changeAdmin","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"admin","outputs":[{"name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"inputs":[{"name":"_implementation","type":"address"}],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"payable":true,"stateMutability":"payable","type":"fallback"},{"anonymous":false,"inputs":[{"indexed":false,"name":"previousAdmin","type":"address"},{"indexed":false,"name":"newAdmin","type":"address"}],"name":"AdminChanged","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"implementation","type":"address"}],"name":"Upgraded","type":"event"}]"###;
+
+    const ETH_TRX_INPUT: &str = r###"0xa9059cbb000000000000000000000000c4fbcea825fb3e4f052004df1b5cb9f2e26c791a0000000000000000000000000000000000000000000000000000000246a750c4"###;
+
+    #[test]
+    fn parse_trx_eth() {
+        crate::error::setup_panic_handler();
+
+        log4rs::init_file("config/log4rs.yml", Default::default()).unwrap();
+
+        let con = crate::parse::contract_abi::create_contract_abi(ETH)
+            .unwrap();
+
+        info!("ABI created: {:?}", con);
+
+        let id_method = super::create_id_method_map(&con);
+
+        info!("map: {:#?}", id_method);
+
+        let input_data = super::parse_trx(&id_method, ETH_TRX_INPUT).unwrap();
+        info!("Result: {:?}", input_data);
+
+        // assert_eq!("submit", input_data.method_name);
+        // assert_eq!(format!("{:?}", input_data.args.get("clientData").unwrap()), r#"{"tax":132,"number":"UUID-1234"}"#);
+        // assert_eq!(format!("{:?}", input_data.args.get("userData").unwrap()), r#"{"id":132,"name":"Alex"}"#);
     }
 }

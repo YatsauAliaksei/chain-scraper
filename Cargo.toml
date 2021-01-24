@@ -43,7 +43,8 @@ num_cpus = "1.13.0"
 rayon = "1.5.0"
 futures-core = "0.3.8"
 structopt = "0.3"
-serde_json = "1.0.60"
+serde_json = { version = "1.0.60"}
+#serde_json = { version = "1.0.60", features = ["arbitrary_precision"] }
 serde = "1.0.118"
 clokwerk = "0.3.4"
 

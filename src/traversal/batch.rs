@@ -1,5 +1,4 @@
 use std::ops::Range;
-use std::slice::Iter;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -62,19 +61,19 @@ pub async fn traversal(web3: Arc<Web3<Transport>>, to_addresses: Vec<String>, mu
 
     if range.end > last_block {
         range.end = last_block;
-        info!("Range changed to align last block in chain. {:?}", range);
+        debug!("Range changed to align last block in chain. {:?}", range);
     }
 
     Some(traversal_parallel(web3, to_addresses, range, batch_size).await)
 }
 
 async fn traversal_parallel(web3: Arc<Web3<Transport>>, to_addresses: Vec<String>, init_range: &Range<u64>, batch_size: u64) -> impl Stream<Item=ChainData> {
-    let size = 10_000;
+    let size = 30_000;
     let mut ranges = create_ranges(&init_range, size);
     ranges.reverse();
 
     info!("Range: {:?}. {} ranges started with size: {}. Sub range size: {}", init_range, ranges.len(), size, batch_size);
-    info!("Looking for contracts related trxs: {:?}", to_addresses);
+    debug!("Looking for contracts related trxs: {:?}", to_addresses);
 
     async_stream::stream! {
         for range in ranges {

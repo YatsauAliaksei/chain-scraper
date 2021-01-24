@@ -2,15 +2,14 @@ use std::sync::Arc;
 
 use actix_web::{App, HttpServer, middleware, Responder, web};
 use actix_web::web::resource;
-use futures::stream::StreamExt;
-use log::{error, info};
+use log::{error, info, debug};
 
 use crate::es::ContractProcessor;
 use crate::mongo::model::Contract;
 use crate::parse::contract_abi::ContractAbi;
 
 pub async fn run_server(cp: Arc<ContractProcessor>, port: u16) -> tokio::io::Result<()> {
-    info!("Starting server on port: {}", port);
+    debug!("Starting server on port: {}", port);
 
     let factory = move || {
         App::new()
@@ -27,7 +26,7 @@ async fn abi_upload(address: web::Path<String>, contract_abi: web::Json<Contract
 
     let contract = Contract::new(address.as_str(), contract_abi.into_inner());
 
-    info!("Parsed contract: {:?}", contract);
+    debug!("Parsed contract: {:?}", contract);
 
     let contract = Arc::new(contract);
     let contract_cloned = contract.clone();

@@ -19,7 +19,7 @@ pub struct MongoDB {
 
 impl MongoDB {
     pub fn new(url: &str) -> Self {
-        info!("Connecting to Mongo [{}]", url);
+        debug!("Connecting to Mongo [{}]", url);
 
         let database = take_db(url);
 
@@ -33,7 +33,7 @@ impl MongoDB {
             .batch_size(100)
             .build()).await?;
 
-        info!("Found {} contracts", result.len());
+        debug!("Found {} contracts", result.len());
 
         Ok(result)
     }
@@ -59,7 +59,7 @@ impl MongoDB {
         Ok(result)
     }
 
-    pub async fn find_trx_to(&self, address: &str, batch_size: u32) -> Result<Cursor> {
+    pub async fn _find_trx_to(&self, address: &str, batch_size: u32) -> Result<Cursor> {
         let collection = self.database.collection(Transaction::COLLECTION_NAME);
 
         match collection.find(doc! {
@@ -76,7 +76,7 @@ impl MongoDB {
         }
     }
 
-    pub async fn find_item(&self, collection_name: &str,
+    pub async fn _find_item(&self, collection_name: &str,
                            filter: impl Into<Option<Document>>,
                            options: impl Into<Option<FindOneOptions>>) -> Option<Document> {
         let collection = self.database.collection(collection_name);
@@ -87,14 +87,14 @@ impl MongoDB {
         }
     }
 
-    pub async fn get_last_block(&self) -> Option<model::Block> {
+    pub async fn _get_last_block(&self) -> Option<model::Block> {
         let find_options = FindOneOptions::builder()
             .sort(doc! {
                         "_id": -1
                     }).build();
 
 
-        let doc = self.find_item(model::Block::COLLECTION_NAME, None, find_options).await;
+        let doc = self._find_item(model::Block::COLLECTION_NAME, None, find_options).await;
         if doc.is_none() {
             return None;
         }
@@ -108,14 +108,14 @@ impl MongoDB {
         }
     }
 
-    pub async fn get_first_block(&self) -> Option<model::Block> {
+    pub async fn _get_first_block(&self) -> Option<model::Block> {
         let find_options = FindOneOptions::builder()
             .sort(doc! {
                         "_id": 1
                     }).build();
 
 
-        let doc = self.find_item(model::Block::COLLECTION_NAME, None, find_options).await;
+        let doc = self._find_item(model::Block::COLLECTION_NAME, None, find_options).await;
         if doc.is_none() {
             return None;
         }
@@ -135,7 +135,7 @@ impl MongoDB {
             return Ok(());
         }
 
-        info!("Saving: {}", chain_data);
+        debug!("Saving: {}", chain_data);
 
         let result = tokio::join!(
             self.save_blocks(&chain_data.blocks),
@@ -175,12 +175,12 @@ impl MongoDB {
     }
 
     pub async fn save_transactions(&self, transactions: &Vec<model::Transaction>) -> Result<Vec<InsertManyResult>> {
-        info!("Saving {} trx", transactions.len());
+        debug!("Saving {} trx", transactions.len());
         self.insert_many(model::Transaction::COLLECTION_NAME, transactions.iter()).await
     }
 
     pub async fn save_blocks(&self, blocks: &Vec<model::Block>) -> Result<Vec<InsertManyResult>> {
-        info!("Saving {} blocks", blocks.len());
+        debug!("Saving {} blocks", blocks.len());
         self.insert_many(model::Block::COLLECTION_NAME, blocks.iter()).await
     }
 
@@ -274,7 +274,7 @@ mod tests {
 
         let mongo_db = MongoDB::new("localhost");
 
-        let block = mongo_db.get_last_block().await.unwrap();
+        let block = mongo_db._get_last_block().await.unwrap();
 
         info!("Block result: {:?}", block);
 
@@ -291,7 +291,7 @@ mod tests {
         let trx_to = "0xf12b5dd4ead5f743c6baa640b0216200e89b60da";
 
         let mongo_db = MongoDB::new("localhost");
-        let mut items = mongo_db.find_trx_to(trx_to, 100).await?;
+        let mut items = mongo_db._find_trx_to(trx_to, 100).await?;
 
         info!("Result: {:?}", items);
 

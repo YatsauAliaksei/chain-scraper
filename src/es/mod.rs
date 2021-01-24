@@ -5,7 +5,7 @@ use anyhow::Result;
 use elasticsearch::{BulkParts, Elasticsearch};
 use elasticsearch::http::request::JsonBody;
 use elasticsearch::http::transport::Transport;
-use log::{debug, info, warn};
+use log::{debug, error};
 use mongodb::results::InsertOneResult;
 use rustc_hex::ToHex;
 use serde_json::{json, Value};
@@ -41,10 +41,10 @@ impl ContractProcessor {
 
     pub async fn process_contract(&self, contract: &Contract, transactions: impl Into<Iter<'_, Transaction>>) -> Result<()> {
         let transactions = transactions.into();
-        info!("Processing {} trx for contract {}", transactions.len(), contract.address);
+        debug!("Processing {} trx for contract {}", transactions.len(), contract.address);
         let map = trx::create_id_method_map(&contract.abi_json);
 
-        let data = transactions
+        let data: Vec<_> = transactions
             .map(|t| {
                 match trx::parse_trx(&map, t.input.0.to_hex::<String>().as_ref()) {
                     Some(input) => Some(model::Transaction::new(&t, input)),
@@ -55,9 +55,15 @@ impl ContractProcessor {
             .map(Option::unwrap)
             .collect();
 
+        let size = data.len();
+
         let res = self.elastic.save_trx(data).await?;
 
-        info!("Data saved to ES: {}", res);
+        if res {
+            debug!("{} saved", size);
+        } else {
+            panic!("Can't save data.")
+        }
         Ok(())
     }
 }
@@ -83,7 +89,7 @@ impl Elastic {
 
         let mut body: Vec<JsonBody<_>> = Vec::with_capacity(transactions.len());
 
-        info!("Saving to ES {} trx", transactions.len());
+        debug!("Saving to ES {} trx", transactions.len());
 
         for trx in transactions {
             let res = serde_json::to_value(&trx)?;
@@ -105,7 +111,7 @@ impl Elastic {
         let successful = response_body["errors"].as_bool().unwrap() == false;
 
         if !successful {
-            warn!("Errors while saving to ES: {:?}", response_body)
+            error!("Errors while saving to ES: {:?}", response_body)
         }
 
         Ok(successful)
@@ -113,7 +119,7 @@ impl Elastic {
 }
 
 pub fn create_connection(url: &str) -> Result<Elasticsearch> {
-    info!("Connection to ES. [{}]", url);
+    debug!("Connection to ES. [{}]", url);
 
     let transport = Transport::single_node(url)?;
 

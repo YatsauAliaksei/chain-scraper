@@ -6,12 +6,13 @@ use anyhow::Result;
 use clokwerk::{Interval, ScheduleHandle, Scheduler};
 use futures_util::pin_mut;
 use futures_util::stream::StreamExt;
-use log::info;
+use log::{info, debug};
 
 use crate::es::ContractProcessor;
 use crate::mongo::model::{ChainDataDO, Contract};
 use crate::mongo::model::Transaction;
-use web3::signing::Key;
+use crate::mongo::MongoDB;
+use std::ops::Range;
 
 #[derive(Debug)]
 pub struct ScheduledScraper {
@@ -67,21 +68,33 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
         return Ok(());
     }
 
-    info!("Found contracts: {:?}", contracts);
+    debug!("Found contracts: {:?}", contracts);
 
-    let mut lowest_high = contracts.iter()
+    let max_default = 100_000_000_000 as u64;
+    let max_low = contracts.iter()
+        .map(|c| c.processed_range.as_ref())
+        .filter(Option::is_some)
+        .map(|processed_range| processed_range.as_ref().unwrap().start)
+        .max().unwrap_or(-1);
+
+    let min_high = contracts.iter()
         .map(|c| c.processed_range.as_ref())
         .filter(Option::is_some)
         .map(|processed_range| processed_range.as_ref().unwrap().end)
-        .min().unwrap_or(0);
+        .min().unwrap_or(-1);
+
+    let mut range = match (max_low, min_high) {
+        (low, _) if low != 0 => 0 as u64..low as u64,
+        (0, high) => high as u64..max_default,
+        (-1, -1) => 0..max_default,
+        (x, y) => panic!("Not expected range {}..{}", x, y),
+    };// as u64..max_low as u64;
 
     let to_addresses: Vec<_> = contracts.iter()
         .map(|c| c.address.clone())
         .collect();
 
     let total_time = Instant::now();
-
-    let mut range = lowest_high as u64..100_000_000_000;
 
     info!("Starting range: {:?}", range);
 
@@ -132,10 +145,12 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
 
             // info!("Going to contracts");
 
-            for contract in &contracts {
+            for contract in contracts.iter_mut() {
                 if let Some(trx_to_save) = address_trx.remove(&contract.address) {
                     info!("Found {} trx for {}", trx_to_save.len(), contract.address);
                     contract_processor.process_contract(contract, trx_to_save.iter()).await.expect("Success");
+
+                    update_contract(mongodb.clone(), range.clone(), contract).await;
                 }
             }
         }
@@ -144,23 +159,27 @@ async fn find(url: Arc<String>, contract_processor: Arc<ContractProcessor>) -> R
         return Ok(());
     }
 
-    for contract in contracts.iter_mut() {
-        let start = if contract.processed_range.is_some() {
-            contract.processed_range.as_ref().unwrap().start
-        } else {
-            0
-        };
-
-        contract.processed_range = Some(start..range.end as i64);
-
-        info!("Updating contract {} with range: {:?}", contract.id, contract.processed_range);
-
-        mongodb.update_contract(contract).await.unwrap();
-    }
+    // for contract in contracts.iter_mut() {
+    //     update_contract(mongodb, range, contract).await;
+    // }
 
     info!("Total spent time: {:?}", Instant::now() - total_time);
 
     *crate::traversal::batch::TRAVERSE_IN_PROGRESS.lock().unwrap() = false;
 
     Ok(())
+}
+
+async fn update_contract(mongodb: Arc<MongoDB>, range: Range<u64>, contract: &mut Contract) {
+    let start = if contract.processed_range.is_some() {
+        contract.processed_range.as_ref().unwrap().start
+    } else {
+        range.start as i64
+    };
+
+    contract.processed_range = Some(start..range.end as i64);
+
+    debug!("Updating contract {} with range: {:?}", contract.id, contract.processed_range);
+
+    mongodb.update_contract(contract).await.expect("Success updating contract range");
 }
